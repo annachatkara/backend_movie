@@ -1,64 +1,30 @@
-const express = require('express');
-const router = express.Router();
-const Content = require('../models/Content'); // Case-sensitive! Check 'C' in Content
-const auth = require('../middleware/auth');
-const ObjectId = require('mongoose').Types.ObjectId;
+// Mongoose model for Content
+const mongoose = require('mongoose');
 
-// GET all content (latest 30 by default, cursor-based)
-router.get('/all', async (req, res) => {
-  const limit = parseInt(req.query.limit) || 10;
-  const lastId = req.query.lastId;
-  let query = {};
-
-  if (lastId) {
-    const lastDoc = await Content.findById(lastId);
-    if (lastDoc) {
-      query.$or = [
-        { createdAt: { $lt: lastDoc.createdAt } },
-        { createdAt: lastDoc.createdAt, _id: { $lt: new ObjectId(lastId) } }
-      ];
-    }
-  }
-
-  const data = await Content.find(query)
-    .sort({ createdAt: -1, _id: -1 })
-    .limit(limit);
-
-  res.json(data);
+// Episode Schema with videoLink
+const episodeSchema = new mongoose.Schema({
+    title: String,
+    duration: String,
+    videoLink: String,  // ✅ Added videoLink here
+    dropback: String  // NEW FIELD
 });
 
-// GET by type with safe cursor-based infinite scroll
-router.get('/:type', async (req, res) => {
-  const type = req.params.type.toLowerCase();
-  const allowed = ['movie', 'anime', 'tvshow', 'series'];
-  const limit = parseInt(req.query.limit) || 10;
-  const lastId = req.query.lastId;
-  let query = {};
-
-  if (allowed.includes(type)) {
-    query.type = type;
-  }
-  if (lastId) {
-    query._id = { $gt: new ObjectId(lastId) };
-  }
-
-  const data = await Content.find(query)
-    .sort({ _id: 1 })
-    .limit(limit);
-
-  res.json(data);
+// Season Schema
+const seasonSchema = new mongoose.Schema({
+    name: String,
+    episodes: [episodeSchema]
 });
 
-// POST new content
-router.post('/', auth, async (req, res) => {
-  try {
-    const content = new Content(req.body);
-    await content.save();
-    res.status(201).json(content);
-  } catch (err) {
-    console.error('Error saving content:', err);
-    res.status(500).json({ message: 'Internal server error' });
-  }
-});
+// Main Content Schema
+const contentSchema = new mongoose.Schema({
+    title: { type: String, required: true },
+    type: { type: String, enum: ['movie', 'series', 'anime', 'tvshow'], required: true },
+    description: String,
+    poster: String,         // ✅ For main poster image
+    dropback: String,       // ✅ For backdrop image
+    adult: { type: String, enum: ['yes', 'no'], default: 'no' },
+    videoLink: String,        // ✅ For full movie or trailer link
+    seasons: [seasonSchema]   // Only if type is series/anime etc
+}, { timestamps: true });
 
-module.exports = router;
+module.exports = mongoose.model('Content', contentSchema);
